@@ -8,6 +8,7 @@ using MovieActorMVC.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.Extensions.Configuration;
 
 namespace MovieActorAPI.Controllers
 {
@@ -16,10 +17,12 @@ namespace MovieActorAPI.Controllers
 	public class UserController: ControllerBase
 	{
 		private readonly MovieActorDbContext _context;
+		private readonly IConfiguration _configuration;
 
-		public UserController(MovieActorDbContext context)
+		public UserController(MovieActorDbContext context, IConfiguration configuration)
 		{
 			_context = context;
+			_configuration = configuration;
 		}
 
 		// POST: api/User
@@ -78,7 +81,28 @@ namespace MovieActorAPI.Controllers
 				return BadRequest("Incorrect password");
 			}
 
-			return Ok(User);
+			// Create claims for the user
+			var claims = new[]
+			{
+				new Claim("UserId", User.UserId.ToString())
+			};
+
+			// Generate the security key
+			var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]));
+
+			// Generate the signing credentials
+			var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+			// Generate the JWT token
+			var token = new JwtSecurityToken(
+				issuer: _configuration["Jwt:Issuer"],
+				audience: _configuration["Jwt:Audience"],
+				claims: claims,
+				expires: DateTime.UtcNow.AddDays(7), // Set the token expiration
+				signingCredentials: signingCredentials
+			);
+
+			return Ok(new { Token = new JwtSecurityTokenHandler().WriteToken(token), User = User });
 		}
 
 	}
